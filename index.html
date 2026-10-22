@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>CryptoYa Omnichaín Arbitrage Expert</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; }
+  h1 { color: #38bdf8; }
+  .card { background: #1e293b; border-radius: 12px; padding: 16px; margin: 12px 0; border-left: 4px solid #22c55e; }
+  .profit { color: #22c55e; font-weight: bold; font-size: 1.2em; }
+  .neg { color: #ef4444; }
+  button { background: #0ea5e9; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 16px; }
+  button:hover { background: #0284c7; }
+  select, input { background: #334155; color: white; border: 1px solid #475569; padding: 8px; border-radius: 6px; }
+  .controls { margin: 20px 0; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  small { color: #94a3b8; }
+</style>
+</head>
+<body>
+<h1>🚀 CryptoYa Omnichaín Arbitrage Expert</h1>
+<p>Alimentado en tiempo real por <code>https://criptoya.com/api</code> — Experto en arbitrajes LATAM + sugerencias omnichaín.</p>
+
+<div class="controls">
+  <label>Coin: <select id="coin"><option>USDT</option><option>USDC</option><option>BTC</option><option>ETH</option><option>DAI</option></select></label>
+  <label>Fiat: <select id="fiat"><option>ARS</option><option>BRL</option><option>CLP</option><option>COP</option><option>MXN</option><option>PEN</option><option>UYU</option></select></label>
+  <label>Volumen: <input id="volume" type="number" value="1000" step="0.01"></label>
+  <button onclick="scan()">Escanear Arbitrajes</button>
+</div>
+
+<div id="results"></div>
+<small id="status">Listo. Presioná Escanear.</small>
+
+<script>
+async function scan() {
+  const coin = document.getElementById('coin').value;
+  const fiat = document.getElementById('fiat').value;
+  const volume = document.getElementById('volume').value;
+  const status = document.getElementById('status');
+  const results = document.getElementById('results');
+  
+  status.textContent = 'Consultando CryptoYa...';
+  results.innerHTML = '';
+  
+  try {
+    const res = await fetch(`https://criptoya.com/api/${coin}/${fiat}/${volume}`);
+    if (!res.ok) throw new Error('API error');
+    const data = await res.json();
+    
+    const ops = [];
+    const exchanges = Object.keys(data);
+    
+    for (const buyEx of exchanges) {
+      const buy = data[buyEx];
+      const buyPrice = buy.totalAsk || buy.ask;
+      if (!buyPrice) continue;
+      
+      for (const sellEx of exchanges) {
+        if (buyEx === sellEx) continue;
+        const sell = data[sellEx];
+        const sellPrice = sell.totalBid || sell.bid;
+        if (!sellPrice) continue;
+        
+        const rawPct = ((sellPrice - buyPrice) / buyPrice) * 100;
+        if (rawPct < 0.2) continue;
+        
+        const netPct = rawPct - 0.2; // buffer
+        const profit = (sellPrice - buyPrice) * volume;
+        
+        ops.push({
+          buyEx, sellEx, buyPrice: buyPrice.toFixed(2), sellPrice: sellPrice.toFixed(2),
+          rawPct: rawPct.toFixed(2), netPct: netPct.toFixed(2), profit: profit.toFixed(2)
+        });
+      }
+    }
+    
+    ops.sort((a,b) => b.netPct - a.netPct);
+    
+    if (ops.length === 0) {
+      results.innerHTML = '<p>No se encontraron oportunidades significativas en este momento.</p>';
+    } else {
+      results.innerHTML = ops.slice(0, 12).map(op => `
+        <div class="card">
+          <strong>${coin}/${fiat}</strong> — Volumen ${volume}<br>
+          Comprar en <b>${op.buyEx}</b> @ ${op.buyPrice} ${fiat}<br>
+          Vender en <b>${op.sellEx}</b> @ ${op.sellPrice} ${fiat}<br>
+          <span class="profit">Net ~${op.netPct}% | Est. ${op.profit} ${fiat}</span><br>
+          <small>Raw: ${op.rawPct}% — Sugerencia omnichaín: mover por la red con menor fee (BSC/Arbitrum/Polygon/Solana)</small>
+        </div>
+      `).join('');
+    }
+    status.textContent = `Escaneo completo. ${ops.length} oportunidades encontradas.`;
+  } catch (e) {
+    status.textContent = 'Error al consultar la API. Intentá de nuevo.';
+    console.error(e);
+  }
+}
+</script>
+</body>
+</html>
